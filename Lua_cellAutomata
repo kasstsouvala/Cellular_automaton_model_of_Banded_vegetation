@@ -1,0 +1,132 @@
+--Banded vegetation: development under uniform rainfall from a simple cellular automaton model
+--Final Project
+
+--Parameters
+rain = 100 -- distributed uniformly to all cells
+rainRange1= 1.2 * rain 
+rainRange2= 3.5 * rain 
+rainRange3= 0.6 * rain 
+
+
+--bare = 1
+--plant = 2
+dry = 1
+notdry = 2
+
+--Define a TerraLib cellurar space
+world = CellularSpace{
+	xdim = 50,
+	ydim = 50
+}
+
+legend = Legend {
+	grouping = "uniquevalue",
+	colorBar = {
+		{value = dry, color = "brown"},
+		{value = notdry, color = "green"}
+	}
+}
+
+fill = function(cs)
+forEachCell(world, function(cell)
+	if math.random() > 0.5 then 
+		cell.color = dry
+		cell.water = 0
+		cell.absorb = 0
+	else
+		cell.color = notdry
+		cell.water = 0
+		cell.absorb = 0
+	end
+end)
+end
+
+fill(world)
+
+myobs = Observer{
+	subject = world,
+	attributes = {"color"},
+	legends = {legend}
+}
+
+
+world:notify()
+
+world:createNeighborhood{
+  strategy = "3x3",
+  filter = function(cell, neighbor)
+  return neighbor.y > cell.y -- y = height
+  end
+}
+
+
+update = function(cs)
+
+	forEachCell(cs, function(cell)
+	
+	if cell:getNeighborhood():size() == 0 then --if the number of bownsloap cells = 0 then ...
+       cell.water = cell.past.water
+    end
+	
+	   if cell.color == bare then
+	      forEachNeighbor(cell, function(cell, neigh)
+	      neigh.water =  (0.9 * rain +  cell.past.water)/cell:getNeighborhood():size() + neigh.water -- Bare cells pass the 90% of rain to the downslope cells
+	          if neigh.color == dry then
+	          cell.absorb = 0.1 * rain
+	          elseif neigh.color == plant then
+	          cell.absorb = 0.9*neigh.water + cell.past.absorb
+	          end
+	     
+	      if cell.absorb >= rainRange3 and cell.absorb <= rainRange2 then 
+		     neigh.color = notdry
+		  elseif cell.absorb >= rainRange1 and  cell.absorb <= rainRange2 then
+	   	     neigh.color = dry 	         
+	      end
+	       end) 
+	
+	   elseif cell.color == notdry then
+	      forEachNeighbor(cell, function(cell, neigh)
+	      neigh.water = 0.1*(cell.past.water+rain)/cell:getNeighborhood():size() + neigh.water
+	          if neigh.color == dry then
+	          cell.absorb = 0.1 * rain
+	          elseif neigh.color == notdry then
+	          cell.absorb = 0.9*neigh.water + cell.past.absorb
+	          end	       
+	     
+	      if cell.absorb >= rainRange1 and  cell.absorb <= rainRange2 then
+	   	     neigh.color = dry 
+	   	  elseif cell.absorb >= rainRange3 and cell.absorb <= rainRange2 then 
+		     neigh.color = notdry	         
+	      end	 
+	       end)   
+       end
+       	
+		
+end)
+end  
+   
+
+t = Timer{
+	Event{action = function(event)
+	 forEachCell (world, function(cell)
+            if cell.color == bare then -- in every iteration, bare cells are dried out totally
+		   cell.absorb = 0  
+		elseif cell.color == plant then -- in every iteration, plant cells dried out to 10mm
+		    if cell.absorb >= 10 then
+		       cell.absorb = cell.absorb - 10 
+		    elseif cell.absorb < 10 then
+		       cell.absorb = 0
+		    end
+		end	
+    end)
+	
+	print("Time:", event:getTime()) io.flush()
+		world:synchronize()
+		update(world)
+		world:notify()
+	end}
+}
+
+
+t:execute(50)
+
